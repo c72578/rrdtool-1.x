@@ -5,14 +5,12 @@ rrdthreads - Provisions for linking the RRD library to use in multi-threaded pro
 =head1 SYNOPSIS
 
 Using librrd in multi-threaded programs requires some extra
-precautions, as the RRD library in its original form was not
-thread-safe at all. This document describes requirements and pitfalls
-on the way to use the multi-threaded version of librrd in your own
-programs. It also gives hints for future RRD development to keep the
-library thread-safe.
+precautions. This document describes requirements and pitfalls on the
+way to use librrd in your own programs. It also gives hints for
+future RRD development to keep the library thread-safe.
 
-Currently only some RRD operations are implemented in a thread-safe
-way. They all end in the usual "C<_r>" suffix.
+Since RRDtool 1.6, F<librrd> is thread-safe and no separate
+thread-specific library is needed.
 
 =head1 DESCRIPTION
 
@@ -22,8 +20,7 @@ In order to use librrd in multi-threaded programs you must:
 
 =item *
 
-Link with F<librrd_th> instead of F<librrd> (use C<-lrrd_th> when
-linking)
+Link with F<librrd> (use C<-lrrd> when linking)
 
 =item *
 
@@ -37,12 +34,12 @@ specifications is terribly non-thread-safe.
 =item *
 
 Never use non *C<_r> functions unless it is explicitly documented that
-the function is tread-safe.
+the function is thread-safe.
 
 =item *
 
 Every thread SHOULD call C<rrd_get_context()> before its first call to
-any C<librrd_th> function in order to set up thread specific data. This
+any C<librrd> function in order to set up thread specific data. This
 is not strictly required, but it is the only way to test if memory
 allocation can be done by this function. Otherwise the program may die
 with a SIGSEGV in a low-memory situation.

@@ -682,7 +682,7 @@ average temperature, respectively.
 =head1 EXAMPLE 2
 
  rrdtool create monitor.rrd --step 300        \
-   DS:ifOutOctets:COUNTER:1800:0:4294967295   \
+   DS:ifOutOctets:COUNTER:1800:0:125000000    \
    RRA:AVERAGE:0.5:1:2016                     \
    RRA:HWPREDICT:1440:0.1:0.0035:288
 
@@ -697,6 +697,7 @@ prediction. The linear trend forecast adapts much more slowly. Observations
 made during the last day (at 288 observations per day) account for only
 65% of the predicted linear trend. Note: these computations rely on an
 exponential smoothing formula described in the LISA 2000 paper.
+The maximum of 125000000 octets per second corresponds to a 1 Gbit/s link.
 
 The seasonal cycle is one day (288 data points at 300 second intervals), and
 the seasonal adaption parameter will be set to 0.1. The RRD file will store 5
@@ -709,7 +710,7 @@ which explicitly creates all specialized function B<RRAs>
 using L<"STEP, HEARTBEAT, and Rows As Durations">.
 
  rrdtool create monitor.rrd --step 5m \
-   DS:ifOutOctets:COUNTER:30m:0:4294967295 \
+   DS:ifOutOctets:COUNTER:30m:0:125000000 \
    RRA:AVERAGE:0.5:1:2016 \
    RRA:HWPREDICT:5d:0.1:0.0035:1d:3 \
    RRA:SEASONAL:1d:0.1:2 \

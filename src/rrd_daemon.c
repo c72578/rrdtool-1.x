@@ -69,6 +69,7 @@
 #include "unused.h"
 
 #include <stdlib.h>
+#include <limits.h>
 #ifdef HAVE_STDINT_H
 #  include <stdint.h>
 #endif
@@ -365,7 +366,8 @@ static void do_log(
         struct tm tm_buf;
 
         if (gmtime_r(&now, &tm_buf) == NULL) {
-            snprintf(buffer, sizeof(buffer), "(time error)");
+            snprintf(buffer, sizeof(buffer), "(time error: %lld e%d)",
+                     (long long) now, errno);
         } else {
             strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm_buf);
         }
@@ -593,12 +595,17 @@ static int check_pidfile(
         return -1;
     }
 
-    pid = atoi(pid_str);
-    if (pid <= 0) {
-        fprintf(stderr, "FATAL: PID file is corrupted\n");
-
-        close(pid_fd);
-        return -1;
+    {
+        char *endptr;
+        long lval;
+        errno = 0;
+        lval = strtol(pid_str, &endptr, 10);
+        if (errno != 0 || endptr == pid_str || lval <= 0 || lval > INT_MAX) {
+            fprintf(stderr, "FATAL: PID file is corrupted\n");
+            close(pid_fd);
+            return -1;
+        }
+        pid = (int) lval;
     }
 
     /* another running process that we can signal COULD be
@@ -860,8 +867,10 @@ static int send_response(
         rc = RESP_OK;
     } else {
         rclen = snprintf(buffer, sizeof buffer, "%d ", lines);
-        if (rclen < 0 || rclen >= (int) sizeof(buffer))
+        if (rclen < 0 || rclen >= (int) sizeof(buffer)) {
+            RRDD_LOG(LOG_DEBUG, "send_response: snprintf failed (rclen=%d)", rclen);
             return -1;
+        }
     }
 
     va_start(argp, fmt);
@@ -1926,11 +1935,17 @@ static int handle_request_tune(
         rc = syntax_error(sock, cmd);
         goto done;
     }
-    argc = atoi(i);
-    if (argc <= 0) {
-        rc = send_response(sock, RESP_ERR, "Invalid argument count specified (%d)\n",
-                           argc);
-        goto done;
+    {
+        char *endptr;
+        long lval;
+        errno = 0;
+        lval = strtol(i, &endptr, 10);
+        if (errno != 0 || endptr == i || *endptr != '\0'
+            || lval <= 0 || lval > INT_MAX) {
+            rc = send_response(sock, RESP_ERR, "Invalid argument count specified\n");
+            goto done;
+        }
+        argc = (int) lval;
     }
 
     if ((argv = malloc(argc * sizeof(char*))) == NULL) {
@@ -2403,11 +2418,17 @@ static int handle_request_first(
         rc = syntax_error(sock, cmd);
         goto done;
     }
-    idx = atoi(i);
-    if (idx < 0) {
-        rc = send_response(sock, RESP_ERR, "Invalid index specified (%d)\n",
-                           idx);
-        goto done;
+    {
+        char *endptr;
+        long lval;
+        errno = 0;
+        lval = strtol(i, &endptr, 10);
+        if (errno != 0 || endptr == i || *endptr != '\0'
+            || lval < 0 || lval > INT_MAX) {
+            rc = send_response(sock, RESP_ERR, "Invalid index specified\n");
+            goto done;
+        }
+        idx = (int) lval;
     }
 
     /* get data */
@@ -4859,13 +4880,19 @@ static int read_options(
         {
             int       threads;
 
-            threads = atoi(options.optarg);
-            if (threads >= 1)
+            {
+                char *endptr;
+                long lval;
+                errno = 0;
+                lval = strtol(options.optarg, &endptr, 10);
+                if (errno != 0 || endptr == options.optarg || *endptr != '\0'
+                    || lval < 1 || lval > INT_MAX) {
+                    fprintf(stderr, "Invalid thread count: -t %s\n",
+                            options.optarg);
+                    return 1;
+                }
+                threads = (int) lval;
                 config_queue_threads = threads;
-            else {
-                fprintf(stderr, "Invalid thread count: -t %s\n",
-                        options.optarg);
-                return 1;
             }
         }
             break;
@@ -5004,15 +5031,17 @@ static int read_options(
 
         case 'a':
         {
-            int       temp = atoi(options.optarg);
-
-            if (temp > 0)
-                config_alloc_chunk = temp;
-            else {
+            char *endptr;
+            long lval;
+            errno = 0;
+            lval = strtol(options.optarg, &endptr, 10);
+            if (errno != 0 || endptr == options.optarg || *endptr != '\0'
+                || lval <= 0 || lval > INT_MAX) {
                 fprintf(stderr, "Invalid allocation size: %s\n",
                         options.optarg);
                 return 10;
             }
+            config_alloc_chunk = (int) lval;
         }
             break;
 

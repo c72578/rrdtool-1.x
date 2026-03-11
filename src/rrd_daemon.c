@@ -365,6 +365,7 @@ static void do_log(
 
         struct tm tm_buf;
 
+        errno = 0; /* gmtime_r may not set errno; zero it for best-effort reporting */
         if (gmtime_r(&now, &tm_buf) == NULL) {
             snprintf(buffer, sizeof(buffer), "(time error: %lld e%d)",
                      (long long) now, errno);
@@ -589,7 +590,7 @@ static int check_pidfile(
         return pid_fd;
     }
 
-    if (read(pid_fd, pid_str, sizeof(pid_str)) <= 0) {
+    if (read(pid_fd, pid_str, sizeof(pid_str) - 1) <= 0) {
         fprintf(stderr, "FATAL: Empty PID file exist\n");
         close(pid_fd);
         return -1;
@@ -600,7 +601,12 @@ static int check_pidfile(
         long lval;
         errno = 0;
         lval = strtol(pid_str, &endptr, 10);
-        if (errno != 0 || endptr == pid_str || lval <= 0 || lval > INT_MAX) {
+        /* skip trailing whitespace/newlines from PID file */
+        while (*endptr == ' ' || *endptr == '\n' || *endptr == '\r'
+               || *endptr == '\t')
+            endptr++;
+        if (errno != 0 || endptr == pid_str || *endptr != '\0'
+            || lval <= 0 || lval > INT_MAX) {
             fprintf(stderr, "FATAL: PID file is corrupted\n");
             close(pid_fd);
             return -1;
@@ -1941,14 +1947,19 @@ static int handle_request_tune(
         errno = 0;
         lval = strtol(i, &endptr, 10);
         if (errno != 0 || endptr == i || *endptr != '\0'
-            || lval <= 0 || lval > INT_MAX) {
-            rc = send_response(sock, RESP_ERR, "Invalid argument count specified\n");
+            || lval <= 0 || lval > 65536) {
+            rc = send_response(sock, RESP_ERR, "Invalid argument count specified: %s\n", i);
             goto done;
         }
         argc = (int) lval;
     }
 
+    if (argc > (int)(SIZE_MAX / sizeof(char*))) {
+        rc = send_response(sock, RESP_ERR, "Argument count too large\n");
+        goto done;
+    }
     if ((argv = malloc(argc * sizeof(char*))) == NULL) {
+        RRDD_LOG(LOG_ERR, "malloc failed for %d argv pointers", argc);
         rc = send_response(sock, RESP_ERR, "%s\n", rrd_strerror(ENOMEM));
         goto done;
     }
@@ -2425,7 +2436,7 @@ static int handle_request_first(
         lval = strtol(i, &endptr, 10);
         if (errno != 0 || endptr == i || *endptr != '\0'
             || lval < 0 || lval > INT_MAX) {
-            rc = send_response(sock, RESP_ERR, "Invalid index specified\n");
+            rc = send_response(sock, RESP_ERR, "Invalid index specified: %s\n", i);
             goto done;
         }
         idx = (int) lval;
@@ -4880,6 +4891,10 @@ static int read_options(
         {
             int       threads;
 
+            if (options.optarg == NULL || *options.optarg == '\0') {
+                fprintf(stderr, "Missing argument for -t\n");
+                return 1;
+            }
             {
                 char *endptr;
                 long lval;
@@ -5033,6 +5048,10 @@ static int read_options(
         {
             char *endptr;
             long lval;
+            if (options.optarg == NULL || *options.optarg == '\0') {
+                fprintf(stderr, "Missing argument for -a\n");
+                return 10;
+            }
             errno = 0;
             lval = strtol(options.optarg, &endptr, 10);
             if (errno != 0 || endptr == options.optarg || *endptr != '\0'

@@ -362,7 +362,13 @@ static void do_log(
         pthread_mutex_lock(&log_lock);
         time_t    now = time(NULL);
 
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", gmtime(&now));
+        struct tm tm_buf;
+
+        if (gmtime_r(&now, &tm_buf) == NULL) {
+            snprintf(buffer, sizeof(buffer), "(time error)");
+        } else {
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm_buf);
+        }
         fprintf(log_fh, "%s [%d] ", buffer, priority);
         vfprintf(log_fh, format, args);
         fprintf(log_fh, "\n");
@@ -573,7 +579,7 @@ static int check_pidfile(
 {
     int       pid_fd;
     pid_t     pid;
-    char      pid_str[16];
+    char      pid_str[16] = {0};
 
     pid_fd = open_pidfile("open", O_RDWR);
     if (pid_fd < 0) {
@@ -765,11 +771,7 @@ static int add_response_info(
         return 0;       /* no extra info returned when in BATCH */
 
     va_start(argp, fmt);
-#ifdef HAVE_VSNPRINTF
     len = vsnprintf(buffer, sizeof(buffer), fmt, argp);
-#else
-    len = vsprintf(buffer, fmt, argp);
-#endif
     va_end(argp);
     if (len < 0) {
         RRDD_LOG(LOG_ERR, "add_response_info: vnsprintf failed");
@@ -858,14 +860,12 @@ static int send_response(
         rc = RESP_OK;
     } else {
         rclen = snprintf(buffer, sizeof buffer, "%d ", lines);
+        if (rclen < 0 || rclen >= (int) sizeof(buffer))
+            return -1;
     }
 
     va_start(argp, fmt);
-#ifdef HAVE_VSNPRINTF
     len = vsnprintf(buffer + rclen, sizeof(buffer) - rclen, fmt, argp);
-#else
-    len = vsprintf(buffer + rclen, fmt, argp);
-#endif
     va_end(argp);
     if (len < 0)
         return -1;
@@ -1927,7 +1927,7 @@ static int handle_request_tune(
         goto done;
     }
     argc = atoi(i);
-    if (argc < 0) {
+    if (argc <= 0) {
         rc = send_response(sock, RESP_ERR, "Invalid argument count specified (%d)\n",
                            argc);
         goto done;
@@ -1940,6 +1940,11 @@ static int handle_request_tune(
     argc_tmp = 0;
     while ((status = buffer_get_field(&buffer, &buffer_size, &tok)) == 0
            && tok) {
+        if (argc_tmp >= argc) {
+            rc = send_response(sock, RESP_ERR,
+                               "Too many arguments (expected %d)\n", argc);
+            goto done;
+        }
         argv[argc_tmp] = tok;
         argc_tmp += 1;
     }
@@ -2486,7 +2491,8 @@ static int handle_request_create(
     char     *file_copy = NULL, *dir = NULL, *dir2 = NULL;
     char     *tok;
     int       ac = 0;
-    char     *av[128];
+#define MAX_CREATE_AV 128
+    char     *av[MAX_CREATE_AV];
     char    **sources = NULL;
     int       sources_length = 0;
     char     *template = NULL;
@@ -2599,10 +2605,22 @@ static int handle_request_create(
             continue;
         }
         if (!strncmp(tok, "DS:", 3)) {
+            if (ac >= MAX_CREATE_AV) {
+                rc = send_response(sock, RESP_ERR,
+                                   "Too many DS/RRA definitions (max %d)\n",
+                                   MAX_CREATE_AV);
+                goto done;
+            }
             av[ac++] = tok;
             continue;
         }
         if (!strncmp(tok, "RRA:", 4)) {
+            if (ac >= MAX_CREATE_AV) {
+                rc = send_response(sock, RESP_ERR,
+                                   "Too many DS/RRA definitions (max %d)\n",
+                                   MAX_CREATE_AV);
+                goto done;
+            }
             av[ac++] = tok;
             continue;
         }

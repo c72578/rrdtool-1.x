@@ -385,6 +385,16 @@ static int rrd_xport_fn(
     /* printf("step: %lu\n",*step); */
     free(step_list);
 
+    if (*step == 0) {
+        rrd_set_error("xport step is zero");
+        free(ref_list);
+        for (unsigned long k = *col_cnt; k > 0; k--)
+            free(legend_list[k - 1]);
+        *col_cnt = 0;
+        free(legend_list);
+        return (-1);
+    }
+
     *start = im->start - im->start % (*step);
 
     *end = im->end - im->end % (*step);
@@ -399,8 +409,9 @@ static int rrd_xport_fn(
          (rrd_value_t *) malloc((*col_cnt) * row_cnt *
                                 sizeof(rrd_value_t))) == NULL) {
         free(ref_list);
-        while ((*col_cnt)--)
-            free(legend_list[*col_cnt]);
+        for (unsigned long k = *col_cnt; k > 0; k--)
+            free(legend_list[k - 1]);
+        *col_cnt = 0;
         free(legend_list);
         rrd_set_error("malloc xport data area");
         return (-1);
@@ -410,15 +421,18 @@ static int rrd_xport_fn(
 	long unsigned int chosen_idx  = 0;
 
     /* fill data structure */
-    for (dst_row = 0; (int) dst_row < (int) row_cnt; dst_row++) {
-        for (i = 0; i < (int) (*col_cnt); i++) {
+    for (dst_row = 0; dst_row < row_cnt; dst_row++) {
+        for (i = 0; (unsigned long) i < *col_cnt; i++) {
             long       vidx = im->gdes[ref_list[i]].vidx;
             time_t     now = *start + dst_row * *step;
 
-            if (im->gdes[vidx].step > 0) {
+            if (im->gdes[vidx].step > 0 &&
+                now >= im->gdes[vidx].start) {
                 chosen_idx = floor((double) (now - im->gdes[vidx].start) / im->gdes[vidx].step) * im->gdes[vidx].ds_cnt + im->gdes[vidx].ds;
 
                 (*dstptr++) = im->gdes[vidx].data[chosen_idx];
+            } else {
+                (*dstptr++) = DNAN;
             }
         }
     }
@@ -1001,6 +1015,9 @@ static void escapeJSON(
     char     *tmp = (char *) malloc(len + 2);
     size_t    l = strlen(txt);
     size_t    pos = 0;
+
+    if (tmp == NULL)
+        return;
 
     /* now iterate over the chars */
     for (size_t i = 0; (i < l) && (pos < len); i++, pos++) {

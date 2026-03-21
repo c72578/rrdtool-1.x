@@ -1954,11 +1954,8 @@ static int handle_request_tune(
         argc = (int) lval;
     }
 
-    if (argc > (int)(SIZE_MAX / sizeof(char*))) {
-        rc = send_response(sock, RESP_ERR, "Argument count too large\n");
-        goto done;
-    }
-    if ((argv = malloc(argc * sizeof(char*))) == NULL) {
+    /* argc is already bounded to 65536 above, so this allocation is safe */
+    if ((argv = malloc((size_t)argc * sizeof(char*))) == NULL) {
         RRDD_LOG(LOG_ERR, "malloc failed for %d argv pointers", argc);
         rc = send_response(sock, RESP_ERR, "%s\n", rrd_strerror(ENOMEM));
         goto done;

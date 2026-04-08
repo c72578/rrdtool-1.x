@@ -73,3 +73,22 @@ else
     echo "$OUT2" | grep -q '"alpha"' && echo "$OUT2" | grep -q '"beta"'
     report "xport json multi-ds legends"
 fi
+
+# --- -S is equivalent to --step ---
+OUT_LONG=$($RRDTOOL xport --step 300 \
+    -s 1300000000 -e 1300003000 \
+    DEF:v=${BUILD}.rrd:val:AVERAGE \
+    XPORT:v:val)
+report "xport --step long form"
+
+OUT_SHORT=$($RRDTOOL xport -S 300 \
+    -s 1300000000 -e 1300003000 \
+    DEF:v=${BUILD}.rrd:val:AVERAGE \
+    XPORT:v:val)
+report "xport -S short form"
+
+if [ "$OUT_LONG" = "$OUT_SHORT" ] ; then
+    ok "xport -S and --step produce identical output"
+else
+    fail 1 "xport -S and --step output differs"
+fi

@@ -98,7 +98,7 @@ int rrd_xport(
         {"start", 's', OPTPARSE_REQUIRED},
         {"end", 'e', OPTPARSE_REQUIRED},
         {"maxrows", 'm', OPTPARSE_REQUIRED},
-        {"step", 261, OPTPARSE_REQUIRED},
+        {"step", 'S', OPTPARSE_REQUIRED},
         {"enumds", 262, OPTPARSE_NONE},
         {"json", 263, OPTPARSE_NONE},
         {"showtime", 't', OPTPARSE_NONE},
@@ -121,7 +121,7 @@ int rrd_xport(
     while ((opt = optparse_long(&options, longopts, NULL)) != -1) {
 
         switch (opt) {
-        case 261:
+        case 'S':
             im.step = atoi(options.optarg);
             break;
         case 262:

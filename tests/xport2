@@ -1,0 +1,45 @@
+#!/bin/bash
+
+. $(dirname $0)/functions
+
+if [ -n "$MSYSTEM" ]; then
+    BUILD=xport2
+else
+    BUILD=$BUILDDIR/xport2
+fi
+
+# Shared RRD: step=300, a single GAUGE DS, two RRAs.
+$RRDTOOL create ${BUILD}.rrd \
+    --start 1300000000 --step 300 \
+    DS:val:GAUGE:600:U:U \
+    RRA:AVERAGE:0.5:1:600 \
+    RRA:AVERAGE:0.5:12:144
+report "create"
+
+$RRDTOOL update ${BUILD}.rrd \
+    1300000300:10 1300000600:20 1300000900:30 \
+    1300001200:40 1300001500:50 1300001800:60 \
+    1300002100:70 1300002400:80 1300002700:90 \
+    1300003000:100
+report "update"
+
+is_cached && exit 0
+
+# --- -S is equivalent to --step ---
+OUT_LONG=$($RRDTOOL xport --step 300 \
+    -s 1300000000 -e 1300003000 \
+    DEF:v=${BUILD}.rrd:val:AVERAGE \
+    XPORT:v:val)
+report "xport --step long form"
+
+OUT_SHORT=$($RRDTOOL xport -S 300 \
+    -s 1300000000 -e 1300003000 \
+    DEF:v=${BUILD}.rrd:val:AVERAGE \
+    XPORT:v:val)
+report "xport -S short form"
+
+if [ "$OUT_LONG" = "$OUT_SHORT" ] ; then
+    ok "xport -S and --step produce identical output"
+else
+    fail 1 "xport -S and --step output differs"
+fi
